@@ -11,13 +11,13 @@ interface NoteFormProps {
 const schema = yup.object().shape({
   title: yup.string().min(3).max(50).required('Title is required'),
   content: yup.string().max(500),
-  tag: yup.mixed<NoteTag>().oneOf(['work', 'personal', 'idea']).required('Tag is required'),
+  tag: yup.mixed<NoteTag>().oneOf(['work', 'personal', 'other']).required('Tag is required'),
 });
 
 const TAG_OPTIONS: { value: NoteTag; label: string }[] = [
   { value: 'work', label: 'Work' },
   { value: 'personal', label: 'Personal' },
-  { value: 'idea', label: 'Idea' },
+  { value: 'other', label: 'Other' },
 ];
 
 export default function NoteForm({ onSubmit, onCancel }: NoteFormProps) {

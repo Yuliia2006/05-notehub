@@ -1,83 +1,63 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient, keepPreviousData, } from '@tanstack/react-query';
-import { useDebounce } from 'use-debounce';
-import css from './App.module.css';
-
-import SearchBox from '../SearchBox/SearchBox';
-import Pagination from '../Pagination/Pagination';
-import NoteList from '../NoteList/NoteList';
-import Modal from '../Modal/Modal';
-import NoteForm from '../NoteForm/NoteForm';
-
-import { fetchNotes, deleteNote, createNote } from '../../services/noteService';
+import { useEffect, useState } from 'react';
 import type { Note } from '../../types/note';
+import { fetchNotes } from '../../services/api';
+
 
 export default function App() {
+  const [notes, setNotes] = useState<Note []>([]);
   const [page, setPage] = useState(1);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [debouncedSearch] = useDebounce(searchTerm, 300);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(false);
 
-  const queryClient = useQueryClient();
+  const perPage = 6;
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['notes', page, debouncedSearch],
-    queryFn: () => fetchNotes({ page, perPage: 12, search: debouncedSearch }),
-     placeholderData: keepPreviousData,
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: deleteNote,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-    },
-  });
-
-  const createMutation = useMutation({
-    mutationFn: createNote,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-      closeModal();
-    },
-  });
-
-  const openModal = () => setIsModalOpen(true);
-  const closeModal = () => setIsModalOpen(false);
-
-  const handleDelete = (id: string) => {
-    deleteMutation.mutate(id);
-  };
-
-  const handleCreate = (note: Omit<Note, 'id' | 'createdAt'>) => {
-    createMutation.mutate(note);
-  };
-
-  const notes = data?.results ?? [];
-  const totalPages = data?.totalPages ?? 0;
+  useEffect(() => {
+    const loadNotes = async () => {
+      setLoading(true);
+      try {
+        const data = await fetchNotes({ page, perPage, search: '' });
+        setNotes(data.results);
+        setTotalPages(data.totalPages);
+      } catch (error) {
+        console.error('Error fetching notes:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadNotes();
+  }, [page]);
 
   return (
-    <div className={css.app}>
-      <header className={css.toolbar}>
-        <SearchBox value={searchTerm} onChange={setSearchTerm} />
-        {totalPages > 1 && <Pagination pageCount={totalPages} onPageChange={setPage} />}
-        <button className={css.button} onClick={openModal}>
-          Create note +
+    <div style={{ padding: '20px' }}>
+      <h1>Notes</h1>
+
+      {loading && <p>Loading...</p>}
+
+      {!loading && notes.length === 0 && <p>No notes found.</p>}
+
+      <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+        {notes.map(note => (
+          <div key={note.id} style={{ border: '1px solid #ccc', padding: '10px', borderRadius: '8px' }}>
+            <h3>{note.title}</h3>
+            <p>{note.content}</p>
+            <small>Tag: {note.tag}</small>
+            <br />
+            <small>Created: {new Date(note.createdAt).toLocaleString()}</small>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: '20px' }}>
+        <button onClick={() => setPage(p => p - 1)} disabled={page === 1}>
+          Prev
         </button>
-      </header>
-
-      {isLoading && <p>Loading...</p>}
-      {isError && <p>Error loading notes</p>}
-      {notes.length > 0 ? (
-        <NoteList notes={notes} onDelete={handleDelete} />
-      ) : (
-        !isLoading && <p>No notes found</p>
-      )}
-
-      {isModalOpen && (
-        <Modal onClose={closeModal}>
-          <NoteForm onSubmit={handleCreate} onCancel={closeModal} />
-        </Modal>
-      )}
+        <span style={{ margin: '0 10px' }}>
+          Page {page} of {totalPages}
+        </span>
+        <button onClick={() => setPage(p => p + 1)} disabled={page === totalPages}>
+          Next
+        </button>
+      </div>
     </div>
   );
 }
