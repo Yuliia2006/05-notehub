@@ -1,63 +1,96 @@
-import { useEffect, useState } from 'react';
-import type { Note } from '../../types/note';
-import { fetchNotes } from '../../services/api';
-
+import { useState, useEffect } from "react";
+import {
+  useQuery,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
+import { toast } from "react-hot-toast";
+import { useDebouncedCallback } from "use-debounce";
+import { fetchNotes } from "../../services/noteService";
+import NoteList from "../NoteList/NoteList";
+import Pagination from "../Pagination/Pagination";
+import Modal from "../Modal/Modal";
+import NoteForm from "../NoteForm/NoteForm";
+import SearchBox from "../SearchBox/SearchBox";
+import css from "./App.module.css";
 
 export default function App() {
-  const [notes, setNotes] = useState<Note []>([]);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
 
-  const perPage = 6;
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const perPage = 12;
+
+  const debouncedSearch = useDebouncedCallback(setSearchQuery, 300);
+
+  const { data, isLoading, isFetching, isError } = useQuery({
+    queryKey: ["notes", currentPage, searchQuery],
+    queryFn: () =>
+      fetchNotes({ page: currentPage, perPage, search: searchQuery }),
+    placeholderData: keepPreviousData,
+  });
 
   useEffect(() => {
-    const loadNotes = async () => {
-      setLoading(true);
-      try {
-        const data = await fetchNotes({ page, perPage, search: '' });
-        setNotes(data.results);
-        setTotalPages(data.totalPages);
-      } catch (error) {
-        console.error('Error fetching notes:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadNotes();
-  }, [page]);
+    if (!data) return;
+    if (currentPage > data.totalPages) {
+      setCurrentPage(data.totalPages || 1);
+    }
+
+   if (!isLoading && !isFetching && (data?.notes?.length ?? 0) === 0) {
+  toast("No such note found", { icon: "ℹ️", duration: 3000 });
+}
+  }, [data, currentPage, isLoading, isFetching]);
+  console.log("data from query:", data);
+
+  const handleCreateSuccess = async () => {
+    queryClient.invalidateQueries({ queryKey: ["notes"] });
+    setIsModalOpen(false);
+  };
 
   return (
-    <div style={{ padding: '20px' }}>
-      <h1>Notes</h1>
+    <div className={css.app}>
+      <header className={css.toolbar}>
+        <SearchBox
+          text={searchInput}
+          onSearch={(value) => {
+            setSearchInput(value);
+            debouncedSearch(value);
+          }}
+        />
 
-      {loading && <p>Loading...</p>}
+        {data && data.totalPages > 1 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={data.totalPages}
+            onPageChange={setCurrentPage}
+          />
+        )}
 
-      {!loading && notes.length === 0 && <p>No notes found.</p>}
-
-      <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
-        {notes.map(note => (
-          <div key={note.id} style={{ border: '1px solid #ccc', padding: '10px', borderRadius: '8px' }}>
-            <h3>{note.title}</h3>
-            <p>{note.content}</p>
-            <small>Tag: {note.tag}</small>
-            <br />
-            <small>Created: {new Date(note.createdAt).toLocaleString()}</small>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ marginTop: '20px' }}>
-        <button onClick={() => setPage(p => p - 1)} disabled={page === 1}>
-          Prev
+        <button
+          className={css.button}
+          onClick={() => setIsModalOpen(true)}
+          disabled={isFetching}
+        >
+          Create note +
         </button>
-        <span style={{ margin: '0 10px' }}>
-          Page {page} of {totalPages}
-        </span>
-        <button onClick={() => setPage(p => p + 1)} disabled={page === totalPages}>
-          Next
-        </button>
-      </div>
+      </header>
+
+      {isLoading && <strong>Loading notes...</strong>}
+      {isError && <div>Error loading notes</div>}
+
+      {data && !isLoading && <NoteList notes={data.notes} />}
+
+      {isModalOpen && (
+        <Modal onClose={() => setIsModalOpen(false)}>
+          <NoteForm
+            onSuccess={handleCreateSuccess}
+            onCancel={() => setIsModalOpen(false)}
+          />
+        </Modal>
+      )}
     </div>
   );
 }

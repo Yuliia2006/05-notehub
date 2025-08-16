@@ -1,40 +1,44 @@
 import axios from 'axios';
 import type { Note } from '../types/note';
 
-export interface FetchNotesResponse {
-  results: Note[];
-  totalPages: number;
-  totalNotes: number;
-}
+axios.defaults.baseURL = "https://notehub-public.goit.study/api/";
+const TOKEN = import.meta.env.VITE_NOTEHUB_TOKEN;
+
 export interface FetchNotesParams {
-  page: number;
-  perPage: number;
-  search?: string;
+  page: number;       
+  perPage: number;    
+  search?: string;    
 }
 
+export interface FetchNotesResponse {
+   notes: Note[];
+  totalItems: number;
+  totalPages: number;
+}
 
-const api = axios.create({
-  baseURL: 'https://notehub-public.goit.study/api', 
-});
-
-export const fetchNotes = async ({
-  page,
-  perPage,
-  search,
-}: FetchNotesParams): Promise<FetchNotesResponse> => {
-  const { data } = await api.get<FetchNotesResponse>('/notes', {
-    params: { page, perPage, search },
+export const fetchNotes = async (params: FetchNotesParams): Promise<FetchNotesResponse> => {
+  const { page = 1, perPage = 12, search = "" } = params;
+  const res = await axios.get<FetchNotesResponse>(`notes/`, {
+    headers: {
+      Authorization: `Bearer ${TOKEN}`,
+    },
+    params: { page, perPage, search }, 
   });
-  return data;
+  return res.data;
 };
 
-export const createNote = async (
-  note: Omit<Note, 'id' | 'createdAt'>
-): Promise<Note> => {
-  const { data } = await api.post<Note>('/notes', note);
-  return data;
+export const createNote = async (noteData: Pick<Note, "title" | "content" | "tag">): Promise<Note> => {
+  const res = await axios.post<Note>(`/notes`, noteData, {
+    headers: {
+      Authorization: `Bearer ${TOKEN}`,
+    },
+  });
+  return res.data;
 };
 
-export const deleteNote = async (id: string): Promise<void> => {
-  await api.delete(`/notes/${id}`);
+export const deleteNote = async (id: string): Promise<Note> => {
+  const res = await axios.delete<Note>(`/notes/${id}`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  return res.data;
 };
